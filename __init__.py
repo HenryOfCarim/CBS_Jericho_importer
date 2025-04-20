@@ -77,7 +77,7 @@ class ImportSM3():
         self.grupy = []
         self.groups = []
         self.namebone = ""
-        self.bonenames = []
+        self.bonenames = {}
         self.id_object = 0
         self.mesh = None
         self.obj = None
@@ -164,7 +164,7 @@ class ImportSM3():
         #for bone in armature.pose.bones:
         #    bone.draw_type = 'STICK'
 
-    def make_bones(self, bonenames):
+    def make_bones(self):
         # global namebone
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
         newarm = self.armature_ob.data
@@ -174,7 +174,7 @@ class ImportSM3():
         print("bone data is {}".format(data))
         self.namebone = self.read_string(self.read_int(1)[0])[-25:]
         print("namebone is {}".format(self.namebone))
-        bonenames[data[1]] = self.namebone
+        self.bonenames[data[1]] = self.namebone
         #eb = A.Editbone()
         eb = ebs.new(self.namebone)
         #newarm.bones[namebone] = eb
@@ -286,8 +286,8 @@ class ImportSM3():
                         texture_node.location = (-300, 0)
                     data = self.read_int(4)
                     if data[3] != 0:
-                        break 
-                    self.read_ubyte(11) 
+                        break
+                    self.read_ubyte(11)
                 else:
                     seek = self.file.tell()
                     self.file.seek(seek-4)
@@ -327,7 +327,7 @@ class ImportSM3():
             bonenames.append('')
         for m in range(data[1]):
         # for m in range(10):
-            self.make_bones(bonenames)
+            self.make_bones()
             long = self.read_int(1)[0]
             for n in range(long):
                 self.read_string(4)
@@ -452,6 +452,7 @@ class ImportSM3():
         for v_id in range(len(self.grupy)):
             data_id = self.grupy[v_id]
             data = self.groups[data_id]
+            vertex_groups = self.obj.vertex_groups
             for m in range(data[0]):
                 gr = data[1][m]
                 try:
@@ -460,6 +461,12 @@ class ImportSM3():
                     gr = str(gr)
                     pass
                 w = data[2][m]
+                try:
+                    vertex_groups[gr].add([v_id], w, 'REPLACE')
+                except KeyError:
+                    # print("There is no vertex group", sw.group_name)
+                    self.obj.vertex_groups.new(name=gr)
+                    vertex_groups[gr].add([v_id], w, 'REPLACE')
                 #if gr not in mesh.getVertGroupNames():
                 #    self.mesh.addVertGroup(gr)
                 #    self.mesh.update()
@@ -479,11 +486,11 @@ class ImportSM3():
 
 def read_string_test(plik,long):  # read string
     s=''
-    for j in range(0,long): 
-        lit =  struct.unpack('c',plik.read(1))[0]
+    for j in range(0, long):
+        lit = struct.unpack('c', plik.read(1))[0]
         if ord(lit)!=0:
-            s+=lit.decode('latin')
-            if len(s)>100:
+            s += lit.decode('latin')
+            if len(s) > 100:
                 break
     return s
 
@@ -602,7 +609,7 @@ def create_texture_normal(m):
     tex_norm.setType('Image')
     tex_norm.setImageFlags('NormalMap')  
     try:
-        img = Blender.Image.Load(dir_images+name_image+'.dds')					  
+        img = Blender.Image.Load(dir_images+name_image+'.dds')
         tex_norm.image = img 
         mat.setTexture(2,tex_norm,Texture.TexCo.UV,Texture.MapTo.NOR) 
     except:
