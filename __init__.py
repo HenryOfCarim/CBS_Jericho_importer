@@ -73,11 +73,13 @@ class ImportSM3():
         self.filepath = filepath
         self.modelname = os.path.basename(filepath).split('.')[0]
         self.armature_ob = None
-        self.meshes = {}
+        self.newarm = None
+        self.meshes = {}  # name | face indices + UV | groups | grupy - bone id?
+        self.mesh_name = ""
         self.grupy = []
         self.groups = []
         self.namebone = ""
-        self.bonenames = {}
+        self.bonenames = []
         self.id_object = 0
         self.mesh = None
         self.obj = None
@@ -154,7 +156,7 @@ class ImportSM3():
         #    armobj.link(newarm)
         #scn.link(armobj)
         armature = bpy.data.armatures.new(namefile+'-arm')
-        self.armature_ob = bpy.data.objects.new(namefile +'-armobj', armature)
+        self.armature_ob = bpy.data.objects.new(namefile + '-armobj', armature)
         bpy.context.collection.objects.link(self.armature_ob)
         bpy.context.view_layer.objects.active = self.armature_ob
         self.armature_ob.data.display_type = 'STICK'
@@ -167,13 +169,13 @@ class ImportSM3():
     def make_bones(self):
         # global namebone
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-        newarm = self.armature_ob.data
+        self.newarm = self.armature_ob.data
         # newarm.makeEditable()
-        ebs = newarm.edit_bones
+        ebs = self.newarm.edit_bones
         data = self.read_int(6)
-        print("bone data is {}".format(data))
+        # print("bone data is {}".format(data))
         self.namebone = self.read_string(self.read_int(1)[0])[-25:]
-        print("namebone is {}".format(self.namebone))
+        # print("namebone is {}".format(self.namebone))
         self.bonenames[data[1]] = self.namebone
         #eb = A.Editbone()
         eb = ebs.new(self.namebone)
@@ -182,30 +184,36 @@ class ImportSM3():
         #newarm.update()
         #newarm.makeEditable()
         nameparent = self.read_string(self.read_int(1)[0])[-25:]
-        print("parent bone is {}".format(nameparent))
+        # print("parent bone is {}".format(nameparent))
         if len(nameparent) > 0:
-            parent = newarm.edit_bones[nameparent]
-            newarm.edit_bones[self.namebone].parent = parent
+            parent = self.newarm.edit_bones[nameparent]
+            self.newarm.edit_bones[self.namebone].parent = parent
         self.read_float(8)
-        #bonematrix = Matrix([self.read_float(4), self.read_float(4), self.read_float(4), self.read_float(4)])
+        # bonematrix = Matrix([self.read_float(4), self.read_float(4), self.read_float(4), self.read_float(4)])
         x = self.read_float(4)
         y = self.read_float(4)
         z = self.read_float(4)
         w = self.read_float(4)
+        imported_matrix = Matrix([x, y, z, w])
+        bonematrix = imported_matrix.transposed()
         self.read_float(23)
         #newarm.update()
         #newarm.makeEditable()
-        bone = newarm.edit_bones[self.namebone]
-        bone.head = Vector((w[0], w[1], w[2]))
+        bone = self.newarm.edit_bones[self.namebone]
+        bone.matrix = bonematrix
+        bone.head = Vector((0, 0, 0))
         bone.tail = Vector((bone.head[0], bone.head[1], bone.head[2] + 0.01))
+        # bone.head = Vector((w[0], w[1], w[2]))
+        # bone.tail = Vector((bone.head[0], bone.head[1], bone.head[2] + 0.01))
         # print(dir(bone))
+        bone.transform(bonematrix)
         # bone.matrix_basis (bonematrix)
         # bone.matrix = bonematrix
         # newarm.update()
 
     def read_mesh_data(self, num):
         # global grupy
-        # grupy = []
+        self.grupy = []
         print(self.namebone + '=' + str(num))
         self.meshes[self.namebone + '='+str(num)] = []
         print('ADD FACES')
@@ -213,14 +221,14 @@ class ImportSM3():
         self.read_string(4)
         print('ADD VERTEXES UVCOORD')
         self.meshes[self.namebone + '='+str(num)].append(self.read_vertexes())
-        print('ADD GROUPS')
+        print('ADD VERTEX GROUPS')
         self.meshes[self.namebone + '='+str(num)].append(self.groups)
         data = self.read_int(2)
         print(self.namebone + '='+str(num))
-        print('ADD GROUPS', data)
+        print('VERTEX GROUPS IS', data)
         for k in range(data[0]):
-            gr = self.read_ushort(1)[0]
-            self.grupy.append(gr)
+            vtx_groups = self.read_ushort(1)[0]
+            self.grupy.append(vtx_groups)
         print('ADD GRUPY')
         self.meshes[self.namebone+'='+str(num)].append(self.grupy)
         self.read_int(2), self.read_int(2), self.read_int(2), self.read_int(2)
@@ -229,23 +237,23 @@ class ImportSM3():
             data1 = self.read_int(2)
             print('making limited groups', data1)
             for m in range(data1[0]):
-                num_gr = self.read_ubyte(1)[0]
-                gr = self.read_ubyte(3)
-                w = self.read_float(3)
-                print(num, gr, w)
-                self.groups.append([num_gr, gr, w])
+                num_bones = self.read_ubyte(1)[0]
+                vtx_groups = self.read_ubyte(3)
+                weights = self.read_float(3)
+                # num_bones 1-3, supports only 3 bones per vertex
+                self.groups.append([num_bones, vtx_groups, weights])
         data = self.read_int(2)
         for m in range(data[0]):
             self.read_ubyte(data[1])
-        data = self.read_int(2)
+        mat_id = self.read_int(2)
         self.read_int(1)
         objectmatrix = self.read_float(16)
-        print(self.id_object)
+        # print(self.id_object)
         self.meshes[self.namebone+'='+str(num)].append(objectmatrix)
         # add id_mat
-        self.meshes[self.namebone+'='+str(num)].append(data[0])
+        self.meshes[self.namebone+'='+str(num)].append(mat_id[0])
 
-    def read_materials(self): 
+    def read_materials(self):
         # global dir_images,name_image
         # dir_images = sys.dirname(filename)+os.sep+'dds'+os.sep
         dir_images = os.path.dirname(self.filepath) + os.sep+'dds' + os.sep
@@ -282,8 +290,29 @@ class ImportSM3():
                         texture_node.location = (-300, -350)
                     if '-b' in name_image:
                         # Normal
-                        link(texture_node.outputs['Color'], shader_node_grp.inputs['Normal'])
-                        texture_node.location = (-300, 0)
+                        # # RGB nodes
+                        normal_separate = mat.node_tree.nodes.new('ShaderNodeSeparateRGB')
+                        normal_separate.name = "separate_normal"
+                        normal_separate.label = "Separate Normal"
+                        normal_separate.location = (-600, 0)
+
+                        normal_combine = mat.node_tree.nodes.new('ShaderNodeCombineRGB')
+                        normal_combine.name = "combine_normal"
+                        normal_combine.label = "Combine Normal"
+                        normal_combine.location = (-400, 0)
+
+                        # # Normal node
+                        normal_map = mat.node_tree.nodes.new('ShaderNodeNormalMap')  # create normal map node
+                        normal_map.inputs[0].default_value = 1.5
+                        normal_map.location = (-200, 0)
+
+                        link(texture_node.outputs['Color'], normal_separate.inputs[0])
+                        link(texture_node.outputs['Alpha'], normal_combine.inputs['R'])
+                        link(normal_separate.outputs['G'], normal_combine.inputs['G'])
+                        link(normal_combine.outputs[0], normal_map.inputs['Color'])
+                        link(normal_map.outputs['Normal'], shader_node_grp.inputs['Normal'])
+
+                        texture_node.location = (-900, 0)
                     data = self.read_int(4)
                     if data[3] != 0:
                         break
@@ -294,11 +323,9 @@ class ImportSM3():
                     break
 
     def readdata(self):
-        #global bonenames,meshes,id_object
-        bonenames = []
-        #meshes = {}
+        # global bonenames,meshes,id_object
+        self.bonenames = []
         id_object = 0
-        # read header
         magic_word = self.read_string(8)
         unk_bytes = self.read_ubyte(12)
         unk_str = self.read_string(4)
@@ -324,22 +351,26 @@ class ImportSM3():
         print('begin----------', data[0])
         print('num nodes------', data[1])
         for m in range(data[1]):
-            bonenames.append('')
+            self.bonenames.append('')
         for m in range(data[1]):
-        # for m in range(10):
             self.make_bones()
             long = self.read_int(1)[0]
+            # INI node?
             for n in range(long):
-                self.read_string(4)
+                unk_node_str = self.read_string(4)
+                print("Unknows node id is ", unk_node_str)
                 data = self.read_int(3)
+                # Bone adjustments
                 for k in range(data[2]):
                     long = self.read_int(1)[0]
-                    self.read_string(long)
+                    node_str = self.read_string(long)
+                    print("Node string is {}".format(node_str))
             long = self.read_int(1)[0]
             for n in range(long):
                 id_object += 1
                 self.read_int(1)
                 num = 0
+                self.groups = []
                 while (True):
                     name = self.read_string(4)
                     if name == 'CAM':
@@ -396,20 +427,26 @@ class ImportSM3():
         return vertexes, uvcoord
 
     def draw_all(self):
-        # global mesh_name,faceslist,vertexy,uvcoord,groups,grupy
-        for mesh_name in self.meshes:
-            mesh_data = self.meshes[mesh_name]
+        # global mesh_name, faceslist, vertexy, uvcoord, groups, grupy
+        for self.mesh_name in self.meshes:
+            mesh_data = self.meshes[self.mesh_name]
             self.faceslist = mesh_data[0]
             self.vertexy = mesh_data[1][0]
             self.uvcoord = mesh_data[1][1]
-            self.groups = mesh_data[2]
-            self.grupy = mesh_data[3]
+            self.groups = mesh_data[2]  # data for all vertices
+            self.grupy = mesh_data[3]  # all vertices?
             mat_id = mesh_data[5]
-            self.drawmesh(mesh_name)
+            self.drawmesh(self.mesh_name)
             if len(self.groups) == 0:
                 matrix = self.make_right_mesh_position()
-                self.obj.setMatrix(matrix)
-                armobj.makeParentBone([self.obj], mesh_name.split('=')[0], 0, 0)
+                #self.obj.setMatrix(matrix)
+                self.obj.matrix_world = matrix
+                # parent mesh objects to the armature
+                # self.armobj.makeParentBone([self.obj], mesh_name.split('=')[0], 0, 0)
+                self.obj.parent = self.armature_ob
+                self.obj.parent_type = 'BONE'
+                self.obj.parent_bone = self.mesh_name.split('=')[0]
+
             else:
                 self.make_vertex_group()
                 #armobj.makeParentDeform([obj],1,0)
@@ -451,22 +488,33 @@ class ImportSM3():
     def make_vertex_group(self):
         for v_id in range(len(self.grupy)):
             data_id = self.grupy[v_id]
-            data = self.groups[data_id]
+            #data = self.groups[data_id]
+            num_bones, bone_ids, weights = self.groups[data_id]
             vertex_groups = self.obj.vertex_groups
-            for m in range(data[0]):
-                gr = data[1][m]
+            for i in range(num_bones):
+                bone_id = bone_ids[i]
+                weight = weights[i]
+                bone_name = self.bonenames[bone_id]
                 try:
-                    gr = self.bonenames[gr]
-                except:
-                    gr = str(gr)
-                    pass
-                w = data[2][m]
-                try:
-                    vertex_groups[gr].add([v_id], w, 'REPLACE')
+                    vertex_groups[bone_name].add([v_id], weight, 'REPLACE')
                 except KeyError:
+                    self.obj.vertex_groups.new(name=bone_name)
+                    vertex_groups[bone_name].add([v_id], weight, 'REPLACE')
+
+            #for m in range(data[0]):
+            #    gr = data[1][m]
+            #    try:
+            #        gr = self.bonenames[gr]
+            #    except:
+            #        gr = str(gr)
+            #        pass
+            #    w = data[2][m]
+            #    try:
+            #        vertex_groups[gr].add([v_id], w, 'REPLACE')
+            #    except KeyError:
                     # print("There is no vertex group", sw.group_name)
-                    self.obj.vertex_groups.new(name=gr)
-                    vertex_groups[gr].add([v_id], w, 'REPLACE')
+             #       self.obj.vertex_groups.new(name=gr)
+             #       vertex_groups[gr].add([v_id], w, 'REPLACE')
                 #if gr not in mesh.getVertGroupNames():
                 #    self.mesh.addVertGroup(gr)
                 #    self.mesh.update()
@@ -475,12 +523,16 @@ class ImportSM3():
 
     def make_right_mesh_position(self):
         name = self.mesh_name.split('=')[0]
-        obj_matrix = self.obj.matrixWorld
-        bones = newarm.bones.values()
+        bone_mat_world = obj_matrix = self.obj.matrix_world
+        # bones = self.newarm.bones.values()
+        #bones = self.armature_ob.bones
+        #bpy.ops.object.mode_set(mode='EDIT')
+        bones = self.armature_ob.data.bones
         for bone in bones:
             if bone.name == name:
-                bone_mat= bone.matrix['ARMATURESPACE']
-                bone_mat_world= bone_mat*obj_matrix
+                # bone_mat = bone.matrix['ARMATURESPACE']
+                bone_mat = bone.matrix_local
+                bone_mat_world = bone_mat*obj_matrix
         return bone_mat_world
 
 
@@ -493,24 +545,6 @@ def read_string_test(plik,long):  # read string
             if len(s) > 100:
                 break
     return s
-
-bigendian = 0
-littleendian = 1
-
-
-if littleendian == True:
-    def read_byte(plik,n):
-        return struct.unpack(n*'b', plik.read(n))
-    def read_ubyte(plik,n):
-        return struct.unpack(n*'B', plik.read(n))
-    def read_short(plik,n):
-        return struct.unpack(n*'h', plik.read(n*2))
-    def read_ushort(plik,n):
-        return struct.unpack(n*'H', plik.read(n*2))
-    def read_int(plik,n):
-        return struct.unpack(n*'i', plik.read(n*4))
-    def read_float(plik,n):
-        return struct.unpack(n*'f', plik.read(n*4))
 
 
 def drawmesh(name): 
@@ -788,7 +822,7 @@ def draw_all():
         faceslist = mesh_data[0]
         vertexy   = mesh_data[1][0]
         uvcoord   = mesh_data[1][1]
-        groups	= mesh_data[2] 
+        groups	= mesh_data[2]
         grupy	 = mesh_data[3]
         mat_id	= mesh_data[5]
         drawmesh(mesh_name)
