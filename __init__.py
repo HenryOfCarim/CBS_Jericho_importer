@@ -66,6 +66,18 @@ if __name__ == "__main__":
     register()
 
 
+# Idea for future refactoring
+class MeshSM3():
+    def __init__(self):
+        self.modelname = ""
+        self.face_indices = []
+        self.uv = []
+        self.vertex_groups = []
+        self.grupy = []
+        self.objectmatrix = None
+        self.mat_id = None
+
+
 class ImportSM3():
     def __init__(self, file, filepath):
         self.file = file
@@ -137,11 +149,9 @@ class ImportSM3():
     def make_bones(self):
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
         self.newarm = self.armature_ob.data
-        ebs = self.newarm.edit_bones
         data = self.read_int(6)
         self.namebone = self.read_string(self.read_int(1)[0])[-25:]
         self.bonenames[data[1]] = self.namebone
-        eb = ebs.new(self.namebone)
         nameparent = self.read_string(self.read_int(1)[0])[-25:]
         # print("parent bone is {}".format(nameparent))
         if len(nameparent) > 0:
@@ -159,11 +169,10 @@ class ImportSM3():
         bone = self.newarm.edit_bones[self.namebone]
         bone.matrix = bonematrix
         bone.head = Vector((0, 0, 0))
-        bone.tail = Vector((bone.head[0], bone.head[1], bone.head[2] + 0.01))
+        bone.tail = Vector((bone.head[0], bone.head[1] + 0.1, bone.head[2]))
         bone.transform(bonematrix)
 
     def read_mesh_data(self, num):
-        # global grupy
         self.grupy = []
         print(self.namebone + '=' + str(num))
         self.meshes[self.namebone + '='+str(num)] = []
@@ -410,6 +419,7 @@ class ImportSM3():
         if len(self.uvcoord) != 0:
             self.uv()
         self.obj = bpy.data.objects.new(name, self.mesh)
+        # The addon doesn't import normals so fake smoothing instead
         for polygon in self.mesh.polygons:
             polygon.use_smooth = True
         bpy.context.collection.objects.link(self.obj)
