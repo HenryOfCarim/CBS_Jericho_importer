@@ -117,15 +117,17 @@ class ImportSM3():
         self.meshes[self.namebone + '='+str(num)] = []
         print('ADD FACES')
         self.meshes[self.namebone + '='+str(num)].append(self.read_faces())
-        self.read_string(4)
+        self.read_string(4)  # LFVF
         print('ADD VERTEXES UVCOORD')
-        self.meshes[self.namebone + '='+str(num)].append(self.read_vertexes())
+        self.meshes[self.namebone + '='+str(num)].append(self.read_vertices())
         print('ADD VERTEX GROUPS')
         self.meshes[self.namebone + '='+str(num)].append(self.groups)
-        data = self.read_int(2)
+        # data = self.read_int(2)
+        num_vgroups = self.read_int(1)[0]
+        unk_num = self.read_int(1)[0]
         print(self.namebone + '='+str(num))
-        print('VERTEX GROUPS IS', data)
-        for k in range(data[0]):
+        print('VERTEX GROUPS ARE', num_vgroups, unk_num)
+        for k in range(num_vgroups):
             vtx_groups = self.read_ushort(1)[0]
             self.grupy.append(vtx_groups)
         print('ADD GRUPY')
@@ -227,20 +229,22 @@ class ImportSM3():
         # global bonenames,meshes,id_object
         self.bonenames = []
         id_object = 0
-        magic_word = self.read_string(8)
-        unk_bytes = self.read_ubyte(12)
-        unk_str = self.read_string(4)
-        unk_int = self.read_int(3)
-        str_num = self.read_int(1)
-        unk_str_01 = self.read_string(str_num[0])
-        unk_int_01 = self.read_int(1)
-        unk_str_02 = self.read_string(4)  # INI
+        self.read_string(4)  # magic word
+        self.read_int(1)  # unk01
+        self.read_ubyte(4)  # unk bytes
+        self.read_float(2)  # unk_floats
+        self.read_string(4)  # unk_str SCN
+        self.read_int(3)  # unk_int
+        str_size = self.read_int(1)[0]
+        self.read_string(str_size)  # unk_str_01
+        self.read_int(1)  # unk_int_01
+        self.read_string(4)  # unk_str_02 INI
         data = self.read_int(3)  # 0, 1 , 31
-        print(data)
+        # print(data)
         for m in range(data[2]):
             long = (self.read_int(1)[0])
-            print(self.read_string(long))
-        print(self.read_float(15))
+            print("Stings header ", self.read_string(long))
+        self.read_float(15)
         self.read_materials()
         seek = self.file.tell()
         self.file.seek(seek-36)
@@ -296,13 +300,15 @@ class ImportSM3():
             faceslist.append(v)
         return faceslist
 
-    def read_vertexes(self):
+    def read_vertices(self):
         vertexes = []
         uvcoord = []
-        data = self.read_int(6)
+        data = self.read_int(4)
+        vtx_format = self.read_int(1)[0]
+        num_vtx = self.read_int(1)[0]
         print("read vertex data", data)
-        if data[4] == 48:
-            for m in range(data[5]):
+        if vtx_format == 48:
+            for m in range(num_vtx):
                 v = self.read_float(3)
                 vertexes.append(v)
                 self.read_float(3)
@@ -311,8 +317,8 @@ class ImportSM3():
                 uvcoord.append([u, 1-v])
                 self.read_float(4)
 
-        if data[4] == 80:
-            for m in range(data[5]):
+        if vtx_format == 80:
+            for m in range(num_vtx):
                 v = self.read_float(3)
                 vertexes.append(v)
                 self.read_float(3)
